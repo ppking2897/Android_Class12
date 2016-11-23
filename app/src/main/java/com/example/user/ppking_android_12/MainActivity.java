@@ -1,9 +1,16 @@
 package com.example.user.ppking_android_12;
 
+import android.Manifest;
+import android.app.ProgressDialog;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Message;
+import android.support.annotation.NonNull;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -12,6 +19,9 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -22,12 +32,16 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.net.URL;
 import java.nio.Buffer;
+import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
     private TextView textView;
     private UIHandler uiHandler;
     private ImageView imageView;
     private Bitmap bmp;
+    private String urlUpload = "www.gamer.com.tw";
+    private File sdroot;
+    private ProgressDialog pDialog;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -38,7 +52,34 @@ public class MainActivity extends AppCompatActivity {
         textView = (TextView)findViewById(R.id.textview);
         uiHandler = new UIHandler();
 
+        //1.驗證
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.READ_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.READ_CONTACTS,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE}, 0);
+        }
+        //2.環境
+        init();
+
     }
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        init();
+    }
+
+    public void init(){
+        sdroot = Environment.getExternalStorageDirectory();
+        pDialog = new ProgressDialog(this);
+        pDialog.setMessage("DownLoading...");
+        pDialog.setProgressStyle(ProgressDialog.STYLE_SPINNER);
+    }
+
+
+
+
     public void test1(View v){
 
         new Thread(){
@@ -148,6 +189,75 @@ public class MainActivity extends AppCompatActivity {
             }
         }.start();
     }
+    public void test6(View v){
+        new Thread(){
+            @Override
+            public void run() {
+                try {
+                    MultipartUtility mu = new MultipartUtility("http://10.0.3.2/add2.php", "UTF-8");
+                    mu.addFormField("account", "mark");
+                    mu.addFormField("passwd", "654321");
+                    List<String> ret =  mu.finish();
+                    Log.v("ppking", ret.get(0));
+                }catch (Exception e){
+                    Log.v("ppking", e.toString());
+                }
+            }
+        }.start();
+    }
+    //Download to SD Card
+    public void test7(View v){
+        pDialog.show();
+        new Thread(){
+            @Override
+            public void run() {
+                try {
+                    URL url = new URL("http://pdfmyurl.com/?url=" + urlUpload);
+                    HttpURLConnection conn = (HttpURLConnection)url.openConnection();
+                    conn.connect();
+
+                    InputStream in = conn.getInputStream();
+
+                    //產生到SD Card路徑以及名稱
+                    File download = new File(sdroot,"ppking.pdf");
+                    FileOutputStream fout = new FileOutputStream(download);
+                    byte[] buf =new byte[4096];
+                    int len;
+                    while((len=in.read(buf))!=-1){
+                        fout.write(buf,0,len);
+                    }
+                    fout.flush();
+                    fout.close();
+                    Log.v("ppking","Download OK");
+                    uiHandler.sendEmptyMessage(3);
+
+                }catch (Exception e){
+                    Log.v("ppking","Download:" + e.toString());
+                    uiHandler.sendEmptyMessage(3);
+                }
+            }
+        }.start();
+    }
+    //Upload to Server
+    public void test8(View v){
+        new Thread(){
+            @Override
+            public void run() {
+                try {
+                    MultipartUtility mu = new MultipartUtility("http://10.0.3.2/add2.php", "UTF-8");
+                    mu.addFormField("account", "mary");
+                    mu.addFormField("passwd", "654321");
+                    mu.addFilePart("file", new File(sdroot, "ppking.pdf"));
+                    List<String> ret =  mu.finish();
+                    Log.v("ppking", ret.get(0));
+                    Log.v("ppking",""+sdroot);
+                }catch (Exception e){
+                    Log.v("ppking", e.toString());
+                }
+            }
+        }.start();
+    }
+
     private class UIHandler extends Handler{
         @Override
         public void handleMessage(Message msg) {
@@ -161,6 +271,10 @@ public class MainActivity extends AppCompatActivity {
                 case 2:
                     imageView.setImageBitmap(bmp);
                     break;
+                case 3:
+                    pDialog.dismiss();
+                    break;
+
 
             }
         }
